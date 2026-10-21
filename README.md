@@ -155,3 +155,62 @@ The model uses an optimized XGBoost Classifier with parameters tuned to restrict
 ├── train_model.py           # Main ML script (Data loading, filtering, feature extraction, training)
 └── visualization.py         # Plotting file containing modular visualization functions
 ```
+
+## Deployment: REST API, Docker and AWS SageMaker
+
+The trained model (`xgboost_emg_classifier.json` + `label_encoder.pkl`) is served
+through a FastAPI REST API, packaged with Docker, and deployed as a real-time
+AWS SageMaker endpoint using a custom container.
+
+### API endpoints
+
+| Method | URL | Description |
+|---|---|---|
+| GET | `/health` | Check that the API is running |
+| POST | `/predict` | Send the 32 window features, get the predicted action |
+| GET | `/ping` | Health check used by AWS SageMaker |
+| POST | `/invocations` | Prediction endpoint used by AWS SageMaker |
+
+Request body (`/predict` and `/invocations`): the 32 features of one 250 ms window,
+8 muscles × RMS, MAV, VAR, SD:
+```json
+{"features": {"r_bicep_RMS": 0.021, "r_bicep_MAV": 0.016, "...": "..."}}
+```
+
+Example response:
+```json
+{"activity_id": 5, "activity": "Elbowing", "class": "Aggressive", "confidence": 0.94}
+```
+
+### Run locally with Docker
+
+```
+docker build -t emg-action-api .
+docker run --rm -p 127.0.0.1:8080:8080 emg-action-api
+```
+Interactive docs: http://127.0.0.1:8080/docs
+
+Test with a real window from the dataset (requires `combined_emg_data.csv`):
+```
+python try_api.py 50000
+```
+
+### Deploy to AWS SageMaker
+
+The container follows SageMaker's bring-your-own-container rules: it listens on
+port 8080, answers `/ping` and `/invocations`, and starts with the `serve` command.
+
+1. Build for SageMaker (amd64, Docker v2 image format) and push to Amazon ECR:
+```
+   docker buildx build --platform linux/amd64 --provenance=false \
+     --output type=image,name=<account-id>.dkr.ecr.us-west-2.amazonaws.com/emg-action-api:v2,push=true,oci-mediatypes=false .
+```
+2. In SageMaker, create a **model** from the ECR image (with an execution role),
+   an **endpoint configuration** (e.g. 1 × `ml.m5.large`) and an **endpoint**.
+3. Create a test payload and call the endpoint (e.g. from AWS CloudShell):
+```
+   python make_payload.py 50000
+   aws sagemaker-runtime invoke-endpoint --endpoint-name emg-action-endpoint \
+     --content-type application/json --body fileb://payload.json output.json
+   cat output.json
+```
