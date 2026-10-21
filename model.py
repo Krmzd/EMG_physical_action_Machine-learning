@@ -5,6 +5,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, classification_report
 from sklearn.preprocessing import LabelEncoder
 from xgboost import XGBClassifier
+import joblib 
 
 # Import plotting functions from visualization.py
 from visualization import (
@@ -121,7 +122,9 @@ if __name__ == "__main__":
         eval_set=[(X_train, y_train), (X_test, y_test)],
         verbose=False
     )
-
+    model.save_model("xgboost_emg_classifier.json")
+    joblib.dump(le, "label_encoder.pkl")
+    
     #  Predictions
     y_pred_encoded = model.predict(X_test)
 
