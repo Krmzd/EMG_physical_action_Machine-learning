@@ -1,0 +1,11 @@
+.git
+.venv
+venv
+__pycache__
+.DS_Store
+.vscode
+images
+*.png
+*.csv
+*.sql
+*.sh

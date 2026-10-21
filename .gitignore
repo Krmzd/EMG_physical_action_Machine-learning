@@ -1,2 +1,8 @@
-combined_emg_data.csv*.csv
 *.csv
+.venv/
+venv/
+__pycache__/
+.DS_Store
+.vscode/
+*.sh
+*.sql
