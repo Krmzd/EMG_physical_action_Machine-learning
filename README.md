@@ -214,3 +214,40 @@ port 8080, answers `/ping` and `/invocations`, and starts with the `serve` comma
      --content-type application/json --body fileb://payload.json output.json
    cat output.json
 ```
+
+### A/B test of two model variants on SageMaker
+
+Two XGBoost variants were deployed behind **one** SageMaker endpoint as production variants
+with equal weights, so SageMaker randomly sent ~50% of requests to each:
+
+| Variant | Settings | File |
+|---|---|---|
+| A | `max_depth=4`, 150 trees, `learning_rate=0.05`, early stopping, `reg_lambda=1.5` | `xgboost_emg_classifier.json` |
+| B | `max_depth=6`, 300 trees, `learning_rate=0.1` | `xgboost_emg_classifier_b.json` |
+
+Both variants use the same Docker image. The model file is chosen with the environment
+variable `MODEL_PATH` (set to `xgboost_emg_classifier_b.json` for variant B).
+
+**How to reproduce:**
+1. `python train_variant_b.py` trains variant B on the same train/test split and saves the
+   77 held-out test windows to `ab_payloads.json`.
+2. Create an endpoint config with two production variants (weight 1 each) and an endpoint:
+   ```
+   aws sagemaker create-endpoint-config --endpoint-config-name emg-ab-config --production-variants \
+     VariantName=VariantA,ModelName=emg-model-a,InstanceType=ml.m5.large,InitialInstanceCount=1,InitialVariantWeight=1 \
+     VariantName=VariantB,ModelName=emg-model-b,InstanceType=ml.m5.large,InitialInstanceCount=1,InitialVariantWeight=1
+   aws sagemaker create-endpoint --endpoint-name emg-ab-endpoint --endpoint-config-name emg-ab-config
+   ```
+3. `python ab_test.py` sends the test windows, records which variant answered each one,
+   and compares accuracy with a two-proportion z-test.
+
+**Result:**
+
+| Variant | Requests | Correct | Accuracy |
+|---|---|---|---|
+| A | 40 | 36 | 90.0% |
+| B | 37 | 34 | 91.9% |
+
+Difference (B − A): +1.9 percentage points, **p = 0.77**. The difference is not statistically
+significant with this sample size, so the simpler variant A was kept. A larger test would be
+needed to detect a small improvement.
