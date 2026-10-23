@@ -14,8 +14,9 @@ import numpy as np
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from xgboost import XGBClassifier
+import os
 
-MODEL_PATH = "xgboost_emg_classifier.json"
+MODEL_PATH = os.getenv("MODEL_PATH", "xgboost_emg_classifier.json")
 ENCODER_PATH = "label_encoder.pkl"
 
 MUSCLE_COLUMNS = [
